@@ -31,10 +31,10 @@ export class FeedGenerator {
   static create(config?: Partial<Config>) {
     const cfg: Config = {
       port: config?.port ?? 3000,
-      hostname: config?.hostname ?? 'feed-generator.test',
+      hostname: 'feed-generator.skyfeed.app',
       sqliteLocation: config?.sqliteLocation ?? ':memory:',
       subscriptionEndpoint: config?.subscriptionEndpoint ?? 'wss://bsky.social',
-      serviceDid: config?.serviceDid ?? 'did:example:test',
+      serviceDid: 'did:web:feed-generator.skyfeed.app',
     }
     const app = express()
     const db = createDb(cfg.sqliteLocation)

@@ -1,36 +1,47 @@
+import { Post } from './db/schema'
+import { Record as PostRecord } from './lexicon/types/app/bsky/feed/post'
 import {
   OutputSchema as RepoEvent,
   isCommit,
 } from './lexicon/types/com/atproto/sync/subscribeRepos'
-import { FirehoseSubscriptionBase, getOpsByType } from './util/subscription'
+import { FirehoseSubscriptionBase, getOpsByType, CreateOp } from './util/subscription'
 
 export class FirehoseSubscription extends FirehoseSubscriptionBase {
   async handleEvent(evt: RepoEvent) {
     if (!isCommit(evt)) return
     const ops = await getOpsByType(evt)
 
-    // This logs the text of every post off the firehose.
-    // Just for fun :)
-    // Delete before actually using
-    for (const post of ops.posts.creates) {
-      console.log(post.record.text)
+    const postsToDelete = ops.posts.deletes.map((del) => del.uri)
+
+    function buildPost(create: CreateOp<PostRecord>, feed: string): Post {
+      return {
+        uri: create.uri,
+        cid: create.cid,
+        replyParent: create.record?.reply?.parent.uri ?? null,
+        replyRoot: create.record?.reply?.root.uri ?? null,
+        indexedAt: new Date().toISOString(),
+        feed: feed,
+      };
     }
 
-    const postsToDelete = ops.posts.deletes.map((del) => del.uri)
-    const postsToCreate = ops.posts.creates
+    const httpPostsToCreate = ops.posts.creates
       .filter((create) => {
-        // only alf-related posts
-        return create.record.text.toLowerCase().includes('alf')
+        return create.record.text.toLowerCase().includes('http')
       })
       .map((create) => {
-        // map alf-related posts to a db row
-        return {
-          uri: create.uri,
-          cid: create.cid,
-          replyParent: create.record?.reply?.parent.uri ?? null,
-          replyRoot: create.record?.reply?.root.uri ?? null,
-          indexedAt: new Date().toISOString(),
-        }
+        return buildPost(create, 'posts-with-links')
+      })
+
+    const eurovisionPostsToCreate = ops.posts.creates
+      .filter((create) => {
+        const text = create.record.text.toLowerCase();
+        return text.includes('eurovision')
+          || text.includes(' esc ')
+          || text.includes('song')
+          || text.includes('contest')
+      })
+      .map((create) => {
+        return buildPost(create, 'eurovision')
       })
 
     if (postsToDelete.length > 0) {
@@ -39,10 +50,17 @@ export class FirehoseSubscription extends FirehoseSubscriptionBase {
         .where('uri', 'in', postsToDelete)
         .execute()
     }
-    if (postsToCreate.length > 0) {
+    if (httpPostsToCreate.length > 0) {
       await this.db
         .insertInto('post')
-        .values(postsToCreate)
+        .values(httpPostsToCreate)
+        .onConflict((oc) => oc.doNothing())
+        .execute()
+    }
+    if (eurovisionPostsToCreate.length > 0) {
+      await this.db
+        .insertInto('post')
+        .values(eurovisionPostsToCreate)
         .onConflict((oc) => oc.doNothing())
         .execute()
     }

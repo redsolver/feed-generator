@@ -8,7 +8,8 @@ export type Post = {
   cid: string
   replyParent: string | null
   replyRoot: string | null
-  indexedAt: string
+  indexedAt: string,
+  feed: string,
 }
 
 export type SubState = {

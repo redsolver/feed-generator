@@ -3,9 +3,14 @@ import { Server } from './lexicon'
 import { AppContext } from './config'
 import { validateAuth } from './auth'
 
+const FEED_IDS = [
+  'did:web:feed-generator.skyfeed.app/app.bsky.feed.generator/posts-with-links',
+  'did:web:feed-generator.skyfeed.app/app.bsky.feed.generator/eurovision'
+]
+
 export default function (server: Server, ctx: AppContext) {
   server.app.bsky.feed.getFeedSkeleton(async ({ params, req }) => {
-    if (params.feed !== 'did:example:alice/app.bsky.feed.generator/whats-alf') {
+    if (!FEED_IDS.includes(params.feed)) {
       throw new InvalidRequestError(
         'Unsupported algorithm',
         'UnsupportedAlgorithm',
@@ -24,11 +29,12 @@ export default function (server: Server, ctx: AppContext) {
     let builder = ctx.db
       .selectFrom('post')
       .selectAll()
+      .where('feed', '=', params.feed.split('/')[2])
       .orderBy('indexedAt', 'desc')
       .orderBy('cid', 'desc')
 
     if (params.cursor) {
-      const [indexedAt, cid] = params.cursor.split('..')
+      const [indexedAt, cid] = params.cursor.split('::')
       if (!indexedAt || !cid) {
         throw new InvalidRequestError('malformed cursor')
       }
@@ -45,9 +51,9 @@ export default function (server: Server, ctx: AppContext) {
       replyTo:
         row.replyParent && row.replyRoot
           ? {
-              root: row.replyRoot,
-              parent: row.replyParent,
-            }
+            root: row.replyRoot,
+            parent: row.replyParent,
+          }
           : undefined,
     }))
 
